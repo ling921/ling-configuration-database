@@ -1,0 +1,82 @@
+name: Build and test
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master, main, develop]
+  pull_request:
+    branches: [master, main, develop]
+  release:
+    types: [published]
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.x
+            9.x
+            10.x
+      - name: Restore
+        run: dotnet restore Ling.Configuration.Database.slnx
+      - name: Build
+        run: dotnet build Ling.Configuration.Database.slnx --configuration Release --no-restore
+      - name: Test
+        run: dotnet test Ling.Configuration.Database.slnx --configuration Release --no-build --verbosity normal
+      - name: Pack NuGet packages
+        run: |
+          mkdir -p artifacts/packages
+          for project in \
+            src/Ling.Configuration.Database/Ling.Configuration.Database.csproj \
+            src/Ling.Configuration.Database.AdoNet/Ling.Configuration.Database.AdoNet.csproj \
+            src/Ling.Configuration.Database.EntityFrameworkCore/Ling.Configuration.Database.EntityFrameworkCore.csproj
+          do
+            dotnet pack "$project" --configuration Release --no-build --output artifacts/packages
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ling.Configuration.Database-nuget
+          path: artifacts/packages/*.*pkg
+          if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'release'
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+      - name: Pack NuGet packages
+        run: |
+          mkdir -p artifacts/packages
+          for project in \
+            src/Ling.Configuration.Database/Ling.Configuration.Database.csproj \
+            src/Ling.Configuration.Database.AdoNet/Ling.Configuration.Database.AdoNet.csproj \
+            src/Ling.Configuration.Database.EntityFrameworkCore/Ling.Configuration.Database.EntityFrameworkCore.csproj
+          do
+            dotnet pack "$project" --configuration Release --output artifacts/packages
+          done
+      - name: NuGet login
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ling921
+      - name: Publish packages
+        run: |
+          dotnet nuget push artifacts/packages/*.nupkg --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          dotnet nuget push artifacts/packages/*.snupkg --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
