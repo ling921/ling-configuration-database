@@ -21,11 +21,15 @@ public sealed class DatabaseConfigurationProviderTests
     }
 
     [Fact]
-    public void RejectsReservedAndDuplicateKeysDuringInitialLoad()
+    public void AllowsConnectionStringKeysAndRejectsDuplicateKeysDuringInitialLoad()
     {
-        Assert.Throws<InvalidOperationException>(() => new ConfigurationBuilder()
-            .AddDatabaseConfiguration(new MutableLoader([new("Ling:Configuration:Database:ConnectionString", "bad")]))
-            .Build());
+        var root = new ConfigurationBuilder()
+            .AddDatabaseConfiguration(new MutableLoader([new("ConnectionStrings:ConfigurationDatabase", "value")]))
+            .Build();
+        using ((IDisposable)root)
+        {
+            Assert.Equal("value", root["ConnectionStrings:ConfigurationDatabase"]);
+        }
 
         Assert.Throws<InvalidOperationException>(() => new ConfigurationBuilder()
             .AddDatabaseConfiguration(new MutableLoader([new("Case:Key", "one"), new("case:key", "two")]))

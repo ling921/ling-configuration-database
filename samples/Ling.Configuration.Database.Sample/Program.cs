@@ -8,11 +8,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
-var connectionString = builder.Configuration["Ling:Configuration:Database:ConnectionString"]
+var connectionString = builder.Configuration.GetConnectionString("ConfigurationDatabase")
     ?? throw new InvalidOperationException("Set the bootstrap database connection string.");
-var pollingInterval = builder.Configuration
-    .GetSection("Ling:Configuration:Database:PollingInterval")
-    .Get<TimeSpan?>() ?? TimeSpan.FromSeconds(30);
 var contextOptions = new DbContextOptionsBuilder<SampleContext>()
     .UseSqlite(connectionString)
     .Options;
@@ -31,8 +28,7 @@ await using (var setup = await contextFactory.CreateDbContextAsync())
 builder.Configuration.AddEntityFrameworkCoreDatabaseConfiguration<SampleContext, Setting>(
     contextFactory,
     context => context.Settings.AsNoTracking(),
-    setting => new ConfigurationEntry(setting.Key, setting.Value),
-    options => options.PollingInterval = pollingInterval);
+    setting => new ConfigurationEntry(setting.Key, setting.Value));
 builder.Services.Configure<SampleOptions>(builder.Configuration.GetSection("Sample"));
 
 using var host = builder.Build();

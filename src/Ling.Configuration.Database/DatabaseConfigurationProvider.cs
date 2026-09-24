@@ -4,7 +4,6 @@ namespace Ling.Configuration.Database;
 
 public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisposable
 {
-    private const string ReservedPrefix = "Ling:Configuration:Database";
     private readonly IDatabaseConfigurationLoader _loader;
     private readonly DatabaseConfigurationOptions _options;
     private readonly CancellationTokenSource _stop = new();
@@ -85,12 +84,6 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
             if (entry is null || string.IsNullOrWhiteSpace(entry.Key))
             {
                 throw new InvalidOperationException("Database configuration keys must not be empty.");
-            }
-
-            if (entry.Key.Equals(ReservedPrefix, StringComparison.OrdinalIgnoreCase)
-                || entry.Key.StartsWith(ReservedPrefix + ":", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException($"Database configuration cannot contain reserved key '{entry.Key}'.");
             }
 
             if (!snapshot.TryAdd(entry.Key, entry.Value))
