@@ -1,6 +1,7 @@
 using Ling.Configuration.Database;
 using Ling.Configuration.Database.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
