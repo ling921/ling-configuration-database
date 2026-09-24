@@ -17,6 +17,10 @@ public sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfigurationLo
         ArgumentException.ThrowIfNullOrWhiteSpace(_options.TableName);
         ArgumentException.ThrowIfNullOrWhiteSpace(_options.KeyColumnName);
         ArgumentException.ThrowIfNullOrWhiteSpace(_options.ValueColumnName);
+        if (_options.EncryptionColumnName is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(_options.EncryptionColumnName);
+        }
     }
 
     public IReadOnlyCollection<ConfigurationEntry> Load()
@@ -44,7 +48,9 @@ public sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfigurationLo
             }
 
             var value = reader.IsDBNull(1) ? null : Convert.ToString(reader.GetValue(1), CultureInfo.InvariantCulture);
-            entries.Add(new ConfigurationEntry(key, value));
+            var isEncrypted = reader.FieldCount > 2 && !reader.IsDBNull(2)
+                && Convert.ToBoolean(reader.GetValue(2), CultureInfo.InvariantCulture);
+            entries.Add(new ConfigurationEntry(key, value, isEncrypted));
         }
 
         return entries;
@@ -73,8 +79,11 @@ public sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfigurationLo
         var table = string.Join(".", _options.TableName.Split('.').Select(QuoteIdentifier));
         var key = QuoteIdentifier(_options.KeyColumnName);
         var value = QuoteIdentifier(_options.ValueColumnName);
+        var encryption = _options.EncryptionColumnName is null
+            ? string.Empty
+            : ", " + QuoteIdentifier(_options.EncryptionColumnName);
         var command = connection.CreateCommand();
-        command.CommandText = $"SELECT {key}, {value} FROM {table}";
+        command.CommandText = $"SELECT {key}, {value}{encryption} FROM {table}";
         return command;
     }
 
@@ -90,7 +99,9 @@ public sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfigurationLo
             }
 
             var value = reader.IsDBNull(1) ? null : Convert.ToString(reader.GetValue(1), CultureInfo.InvariantCulture);
-            entries.Add(new ConfigurationEntry(key, value));
+            var isEncrypted = reader.FieldCount > 2 && !reader.IsDBNull(2)
+                && Convert.ToBoolean(reader.GetValue(2), CultureInfo.InvariantCulture);
+            entries.Add(new ConfigurationEntry(key, value, isEncrypted));
         }
 
         return entries;

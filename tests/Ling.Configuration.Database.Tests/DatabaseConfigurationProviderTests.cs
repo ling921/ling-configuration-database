@@ -1,6 +1,8 @@
+using System.Security.Cryptography;
 using Ling.Configuration.Database;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Ling.Configuration.Database.Tests;
@@ -18,6 +20,53 @@ public sealed class DatabaseConfigurationProviderTests
 
         Assert.Equal("Information", root["Logging:LogLevel:Default"]);
         Assert.Equal("true", root["Feature:Enabled"]);
+    }
+
+    [Fact]
+    public void DecryptsOnlyEntriesMarkedAsEncrypted()
+    {
+        var root = new ConfigurationBuilder()
+            .AddDatabaseConfiguration(
+                new MutableLoader([
+                    new("Secrets:Token", "cipher-text", IsEncrypted: true),
+                    new("Feature:Enabled", "true")]),
+                options => options.Decryptor = entry => $"plain:{entry.Value}")
+            .Build();
+        using ((IDisposable)root)
+        {
+            Assert.Equal("plain:cipher-text", root["Secrets:Token"]);
+            Assert.Equal("true", root["Feature:Enabled"]);
+        }
+    }
+
+    [Fact]
+    public void UsesCiphertextWhenNoDecryptorIsConfigured()
+    {
+        var logger = new RecordingLogger();
+        var root = new ConfigurationBuilder()
+            .AddDatabaseConfiguration(
+                new MutableLoader([new("Secrets:Token", "cipher-text", IsEncrypted: true)]),
+                options => options.Logger = logger)
+            .Build();
+        using ((IDisposable)root)
+        {
+            Assert.Equal("cipher-text", root["Secrets:Token"]);
+            Assert.IsType<InvalidOperationException>(logger.LastException);
+        }
+    }
+
+    [Fact]
+    public void UsesCiphertextWhenDecryptorThrows()
+    {
+        var root = new ConfigurationBuilder()
+            .AddDatabaseConfiguration(
+                new MutableLoader([new("Secrets:Token", "cipher-text", IsEncrypted: true)]),
+                options => options.Decryptor = _ => throw new CryptographicException("Bad key."))
+            .Build();
+        using ((IDisposable)root)
+        {
+            Assert.Equal("cipher-text", root["Secrets:Token"]);
+        }
     }
 
     [Fact]
@@ -172,6 +221,18 @@ public sealed class DatabaseConfigurationProviderTests
     private sealed class MessageOptions
     {
         public string? Message { get; set; }
+    }
+
+    private sealed class RecordingLogger : ILogger
+    {
+        public Exception? LastException { get; private set; }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => LastException = exception;
     }
 
     private sealed class SlowLoader : IDatabaseConfigurationLoader

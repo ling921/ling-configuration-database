@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Ling.Configuration.Database;
 
@@ -75,7 +76,7 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
         }
     }
 
-    private static Dictionary<string, string?> ValidateAndCreateSnapshot(IReadOnlyCollection<ConfigurationEntry> entries)
+    private Dictionary<string, string?> ValidateAndCreateSnapshot(IReadOnlyCollection<ConfigurationEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);
         var snapshot = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
@@ -86,13 +87,62 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
                 throw new InvalidOperationException("Database configuration keys must not be empty.");
             }
 
-            if (!snapshot.TryAdd(entry.Key, entry.Value))
+            var value = entry.Value;
+            if (entry.IsEncrypted)
+            {
+                try
+                {
+                    if (value is null)
+                    {
+                        throw new InvalidOperationException("The encrypted database value is NULL.");
+                    }
+
+                    var decryptor = _options.Decryptor
+                        ?? throw new InvalidOperationException("No decryptor was configured.");
+                    value = decryptor(entry);
+                }
+                catch (Exception exception)
+                {
+                    LogDecryptionFallback(exception, entry);
+                    value = entry.Value;
+                }
+            }
+
+            if (!snapshot.TryAdd(entry.Key, value))
             {
                 throw new InvalidOperationException($"Database configuration contains duplicate key '{entry.Key}'.");
             }
         }
 
         return snapshot;
+    }
+
+    private void LogDecryptionFallback(Exception exception, ConfigurationEntry entry)
+    {
+        if (_options.Logger is { } logger)
+        {
+            try
+            {
+                logger.LogError(exception, "Could not decrypt configuration key '{ConfigurationKey}'; using the stored value.", entry.Key);
+                return;
+            }
+            catch
+            {
+                // Logging must not prevent loading the original configuration value.
+            }
+        }
+
+        try
+        {
+            System.Diagnostics.Trace.TraceError(
+                "Could not decrypt configuration key '{0}'; using the stored value. {1}",
+                entry.Key,
+                exception);
+        }
+        catch
+        {
+            // Logging must not prevent loading the original configuration value.
+        }
     }
 
     private static bool SnapshotsEqual(IDictionary<string, string?> current, IDictionary<string, string?> next)

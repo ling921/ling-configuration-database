@@ -20,7 +20,7 @@ await using (var setup = await contextFactory.CreateDbContextAsync())
     await setup.Database.EnsureCreatedAsync();
     if (!await setup.Settings.AnyAsync())
     {
-        setup.Settings.Add(new Setting { Key = "Sample:Message", Value = "Loaded from the database" });
+        setup.Settings.Add(new Setting { ConfigKey = "Sample:Message", ConfigValue = "Loaded from the database" });
         await setup.SaveChangesAsync();
     }
 }
@@ -28,7 +28,7 @@ await using (var setup = await contextFactory.CreateDbContextAsync())
 builder.Configuration.AddEntityFrameworkCoreDatabaseConfiguration<SampleContext, Setting>(
     contextFactory,
     context => context.Settings.AsNoTracking(),
-    setting => new ConfigurationEntry(setting.Key, setting.Value));
+    setting => new ConfigurationEntry(setting.ConfigKey, setting.ConfigValue, setting.IsEncrypted));
 builder.Services.Configure<SampleOptions>(builder.Configuration.GetSection("Sample"));
 
 using var host = builder.Build();
@@ -45,8 +45,9 @@ sealed class SampleContext(DbContextOptions<SampleContext> options) : DbContext(
 sealed class Setting
 {
     public int Id { get; set; }
-    public string Key { get; set; } = "";
-    public string? Value { get; set; }
+    public string ConfigKey { get; set; } = "";
+    public string? ConfigValue { get; set; }
+    public bool IsEncrypted { get; set; }
 }
 
 sealed class SampleOptions

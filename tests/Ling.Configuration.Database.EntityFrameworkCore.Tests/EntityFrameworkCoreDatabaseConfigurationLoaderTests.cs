@@ -16,18 +16,18 @@ public sealed class EntityFrameworkCoreDatabaseConfigurationLoaderTests
         await using (var context = CreateContext(connectionString))
         {
             await context.Database.EnsureCreatedAsync();
-            context.Settings.Add(new ConfigurationRow { Key = "Feature:Enabled", Value = "true" });
+            context.Settings.Add(new ConfigurationRow { ConfigKey = "Feature:Enabled", ConfigValue = "true", IsEncrypted = false });
             await context.SaveChangesAsync();
         }
 
         var loader = new EntityFrameworkCoreDatabaseConfigurationLoader<SettingsContext, ConfigurationRow>(
             new DelegateDbContextFactory<SettingsContext>(() => CreateContext(connectionString)),
             context => context.Settings.AsNoTracking(),
-            row => new ConfigurationEntry(row.Key, row.Value));
+            row => new ConfigurationEntry(row.ConfigKey, row.ConfigValue, row.IsEncrypted));
 
         var entries = await loader.LoadAsync();
         var initialEntries = loader.Load();
-        Assert.Contains(entries, entry => entry.Key == "Feature:Enabled" && entry.Value == "true");
+        Assert.Contains(entries, entry => entry.Key == "Feature:Enabled" && entry.Value == "true" && !entry.IsEncrypted);
         Assert.Single(initialEntries);
     }
 
@@ -52,7 +52,8 @@ public sealed class EntityFrameworkCoreDatabaseConfigurationLoaderTests
     private sealed class ConfigurationRow
     {
         public int Id { get; set; }
-        public string Key { get; set; } = "";
-        public string? Value { get; set; }
+        public string ConfigKey { get; set; } = "";
+        public string? ConfigValue { get; set; }
+        public bool IsEncrypted { get; set; }
     }
 }

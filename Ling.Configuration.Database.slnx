@@ -10,6 +10,17 @@
     <Project Path="tests/Ling.Configuration.Database.EntityFrameworkCore.Tests/Ling.Configuration.Database.EntityFrameworkCore.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
-    <Project Path="samples/Ling.Configuration.Database.Sample/Ling.Configuration.Database.Sample.csproj" />
+    <Project Path="samples/Ling.Configuration.Database.AdoNet.Sample/Ling.Configuration.Database.AdoNet.Sample.csproj" />
+    <Project Path="samples/Ling.Configuration.Database.EntityFrameworkCore.Sample/Ling.Configuration.Database.EntityFrameworkCore.Sample.csproj" />
+  </Folder>
+  <Folder Name="/Solution items/">
+    <File Path=".editorconfig" />
+    <File Path=".gitignore" />
+    <File Path="assets/icon.png" />
+    <File Path="Directory.Build.props" />
+    <File Path="LICENSE" />
+    <File Path="README.md" />
+    <File Path="README.zh-CN.md" />
+    <File Path="src/Directory.Build.props" />
   </Folder>
 </Solution>

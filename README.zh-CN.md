@@ -21,12 +21,14 @@ EF Core 适配器分别面向 .NET 8、9、10，并引用对应主版本的 EF C
 
 ## 数据格式
 
-默认表包含 `ConfigKey` 和 `ConfigValue` 两列。配置键使用冒号分隔的标准层级格式：
+ADO.NET 适配器默认读取 `ConfigurationEntries` 表的 `ConfigKey`、`ConfigValue` 和 `IsEncrypted` 列。`ConfigKey` 非空且不区分大小写唯一，`ConfigValue` 可以为空；数据库中建议将 `IsEncrypted` 默认设为 `false`。EF Core 应用在自己的实体中映射对应字段。配置键使用冒号分隔的标准层级格式：
 
-| ConfigKey | ConfigValue |
-| --- | --- |
-| `Logging:LogLevel:Default` | `Information` |
-| `Features:NewCheckout` | `true` |
+| ConfigKey | ConfigValue | IsEncrypted |
+| --- | --- | --- |
+| `Logging:LogLevel:Default` | `Information` | `false` |
+| `Secrets:ApiToken` | 加密后的内容 | `true` |
+
+`IsEncrypted = true` 的行会在进入配置快照前交给解密器；普通行不会调用解密器。若未配置解密器或解密器抛出异常，会记录异常并使用数据库密文作为配置值。设置 `DatabaseConfigurationOptions.Logger` 可使用应用的日志记录器。EF Core 由应用自己的实体映射该标记列，ADO.NET 可以配置或关闭标记列。
 
 配置数据库的连接字符串放在应用自己的引导配置中，通常使用 `ConnectionStrings`。在添加本提供程序之前读取连接字符串；本提供程序使用注册时取得的连接字符串，之后从数据库读取到的同名配置不会改变它正在使用的连接。
 
@@ -71,7 +73,8 @@ IDbContextFactory<SettingsContext> contextFactory = CreateSettingsContextFactory
 builder.Configuration.AddEntityFrameworkCoreDatabaseConfiguration<SettingsContext, Setting>(
     contextFactory,
     context => context.Settings.AsNoTracking(),
-    setting => new ConfigurationEntry(setting.Key, setting.Value));
+    setting => new ConfigurationEntry(setting.ConfigKey, setting.ConfigValue, setting.IsEncrypted),
+    options => options.Decryptor = entry => myDecryptor.Decrypt(entry.Key, entry.Value!));
 ```
 
 适配器会在启动加载和每次轮询时创建并释放一个上下文。若应用已有 `IDbContextFactory<TContext>`，可直接传入；否则可使用与应用相同的 `DbContextOptions` 配置创建工厂。不要传入某个请求作用域中的 `DbContext` 实例：配置源的生命周期长于请求作用域，而且 EF Core 上下文不支持并发使用。工厂应直接使用引导配置，不能依赖配置构建完成后才创建的应用服务容器。
@@ -86,9 +89,18 @@ builder.Configuration.AddEntityFrameworkCoreDatabaseConfiguration<SettingsContex
 
 配置源按应用级工作。调用方可以通过查询或连接工厂选择租户配置；本库不在 `IConfiguration` 中内建租户上下文。
 
+## 示例
+
+每个适配器都有独立的可运行示例：
+
+- **[ADO.NET + SQLite](samples/Ling.Configuration.Database.AdoNet.Sample)** — 创建本地 SQLite 表、加载示例值并观察选项重载。
+  运行：`dotnet run --project samples/Ling.Configuration.Database.AdoNet.Sample`
+- **[EF Core + SQLite](samples/Ling.Configuration.Database.EntityFrameworkCore.Sample)** — 使用 `IDbContextFactory<TContext>` 和包含 `IsEncrypted` 标记的 EF 实体。
+  运行：`dotnet run --project samples/Ling.Configuration.Database.EntityFrameworkCore.Sample`
+
 ## 安全
 
-本提供程序以普通字符串读取并返回配置值，不负责加密或解密。请通过数据库权限控制、TLS 和数据库静态加密保护数据。如果单个配置值以密文存储，可在应用自定义的 loader 或密钥管理集成中解密，并从独立于此数据库的位置提供密钥。
+本提供程序可通过应用提供的回调解密已标记的记录，但不指定加密算法，也不管理密钥。请通过数据库权限控制、TLS 和数据库静态加密保护数据，并从独立于此数据库的位置获取解密密钥。
 
 ## 许可证
 

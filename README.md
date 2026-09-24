@@ -21,12 +21,14 @@ The EF Core adapter targets .NET 8, 9, and 10 with the corresponding EF Core maj
 
 ## Storage
 
-The table has `ConfigKey` and `ConfigValue` columns by default. Keys use the normal colon-separated configuration format:
+The ADO.NET adapter defaults to the `ConfigurationEntries` table with `ConfigKey`, `ConfigValue`, and `IsEncrypted` columns. `ConfigKey` is a non-empty, case-insensitive unique key; `ConfigValue` can be null; set the database column default for `IsEncrypted` to `false`. EF Core applications map the equivalent fields in their own entity. Keys use the normal colon-separated configuration format:
 
-| ConfigKey | ConfigValue |
-| --- | --- |
-| `Logging:LogLevel:Default` | `Information` |
-| `Features:NewCheckout` | `true` |
+| ConfigKey | ConfigValue | IsEncrypted |
+| --- | --- | --- |
+| `Logging:LogLevel:Default` | `Information` | `false` |
+| `Secrets:ApiToken` | encrypted payload | `true` |
+
+Rows marked `IsEncrypted = true` are passed to the configured decryptor before they enter the configuration snapshot. Plain rows do not use the decryptor. If no decryptor is configured or it throws, the error is logged and the stored ciphertext is used. Configure `DatabaseConfigurationOptions.Logger` to use the application's logger. The EF Core adapter lets the application map this marker through its own entity; ADO.NET can configure or disable the marker column.
 
 Keep the configuration database connection string in the application's normal bootstrap configuration, usually under `ConnectionStrings`. Read it before adding this provider. The database source uses the connection string captured at registration time; values loaded later do not change its active connection.
 
@@ -71,7 +73,8 @@ IDbContextFactory<SettingsContext> contextFactory = CreateSettingsContextFactory
 builder.Configuration.AddEntityFrameworkCoreDatabaseConfiguration<SettingsContext, Setting>(
     contextFactory,
     context => context.Settings.AsNoTracking(),
-    setting => new ConfigurationEntry(setting.Key, setting.Value));
+    setting => new ConfigurationEntry(setting.ConfigKey, setting.ConfigValue, setting.IsEncrypted),
+    options => options.Decryptor = entry => myDecryptor.Decrypt(entry.Key, entry.Value!));
 ```
 
 The adapter creates and disposes a context for the initial load and every poll. Pass an existing `IDbContextFactory<TContext>` when available, or construct one from the same `DbContextOptions` setup used by the application. Do not pass a scoped `DbContext` instance: configuration outlives a request scope, and EF Core contexts are not thread safe. The factory must use bootstrap settings directly and cannot depend on the application service provider that is built after configuration.
@@ -86,9 +89,18 @@ Services that use `IOptionsMonitor<T>` receive updated options. A value read onc
 
 The source is application scoped. Applications can select a tenant's rows in their query or connection factory; tenant context is not built into `IConfiguration`.
 
+## Samples
+
+Each adapter has a runnable sample:
+
+- **[ADO.NET with SQLite](samples/Ling.Configuration.Database.AdoNet.Sample)** — Creates a local SQLite table, loads a sample value, and observes options reloads.
+  Run: `dotnet run --project samples/Ling.Configuration.Database.AdoNet.Sample`
+- **[EF Core with SQLite](samples/Ling.Configuration.Database.EntityFrameworkCore.Sample)** — Uses `IDbContextFactory<TContext>` and an EF entity with the `IsEncrypted` marker.
+  Run: `dotnet run --project samples/Ling.Configuration.Database.EntityFrameworkCore.Sample`
+
 ## Security
 
-The provider reads and returns values as plain strings; it does not encrypt or decrypt them. Protect the database with appropriate access controls, TLS, and at-rest encryption. If individual values are stored as ciphertext, decrypt them in an application-owned loader or secret-management integration, with keys supplied independently of this database.
+The provider can decrypt explicitly marked rows through an application-supplied callback, but it does not choose an encryption algorithm or manage keys. Protect the database with appropriate access controls, TLS, and at-rest encryption. Obtain decryption keys independently of this database.
 
 ## License
 

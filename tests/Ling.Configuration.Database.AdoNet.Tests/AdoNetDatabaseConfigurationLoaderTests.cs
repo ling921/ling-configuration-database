@@ -13,7 +13,7 @@ public sealed class AdoNetDatabaseConfigurationLoaderTests
         await anchor.OpenAsync();
         await using (var command = anchor.CreateCommand())
         {
-            command.CommandText = "CREATE TABLE ConfigurationEntries (ConfigKey TEXT NOT NULL, ConfigValue TEXT NULL); INSERT INTO ConfigurationEntries VALUES ('Feature:Enabled', 'true'), ('Optional', NULL);";
+            command.CommandText = "CREATE TABLE ConfigurationEntries (ConfigKey TEXT NOT NULL, ConfigValue TEXT NULL, IsEncrypted INTEGER NOT NULL DEFAULT 0); INSERT INTO ConfigurationEntries (ConfigKey, ConfigValue, IsEncrypted) VALUES ('Feature:Enabled', 'true', 0), ('Optional', NULL, 0), ('Secrets:Token', 'cipher-text', 1);";
             await command.ExecuteNonQueryAsync();
         }
 
@@ -28,6 +28,7 @@ public sealed class AdoNetDatabaseConfigurationLoaderTests
 
         Assert.Contains(entries, entry => entry.Key == "Feature:Enabled" && entry.Value == "true");
         Assert.Contains(entries, entry => entry.Key == "Optional" && entry.Value is null);
-        Assert.Equal(2, initialEntries.Count);
+        Assert.Contains(entries, entry => entry.Key == "Secrets:Token" && entry.Value == "cipher-text" && entry.IsEncrypted);
+        Assert.Equal(3, initialEntries.Count);
     }
 }

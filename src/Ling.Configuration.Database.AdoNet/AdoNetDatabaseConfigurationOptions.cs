@@ -9,5 +9,6 @@ public sealed class AdoNetDatabaseConfigurationOptions
     public string TableName { get; init; } = "ConfigurationEntries";
     public string KeyColumnName { get; init; } = "ConfigKey";
     public string ValueColumnName { get; init; } = "ConfigValue";
+    public string? EncryptionColumnName { get; init; } = "IsEncrypted";
     public Func<string, string>? IdentifierQuoter { get; init; }
 }
