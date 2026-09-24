@@ -5,75 +5,76 @@ English | [简体中文](README.zh-CN.md)
 [![Build](https://github.com/ling921/ling-configuration-database/actions/workflows/build.yml/badge.svg)](https://github.com/ling921/ling-configuration-database/actions/workflows/build.yml)
 [![NuGet](https://img.shields.io/nuget/v/Ling.Configuration.Database.svg)](https://www.nuget.org/packages/Ling.Configuration.Database/)
 
-Database-backed `Microsoft.Extensions.Configuration` provider with polling, snapshot change detection, reload tokens, and optional value decryption.
+An ADO.NET backed `Microsoft.Extensions.Configuration` provider with polling reload support. It is distributed as one package; install the ADO.NET driver you want to use separately.
 
 ## Install
 
 ```shell
 dotnet add package Ling.Configuration.Database
+dotnet add package Microsoft.Data.Sqlite
 ```
 
-Install an adapter package to read from a database:
+## Usage
 
-- [ADO.NET adapter](https://www.nuget.org/packages/Ling.Configuration.Database.AdoNet/)
-- [Entity Framework Core adapter](https://www.nuget.org/packages/Ling.Configuration.Database.EntityFrameworkCore/)
+Read the bootstrap connection string before adding the database source. It is captured when `AddDatabase` is called, so a value loaded from the database cannot change the connection used by this provider.
 
-The core package targets .NET 8 and has no database driver dependency.
-
-## Stored values
-
-Each database row represents one configuration key. ADO.NET defaults to a `ConfigurationEntries` table with the columns below; EF Core applications map equivalent fields in their own entity. Keys use the standard colon-separated format:
-
-| ConfigKey | ConfigValue | IsEncrypted |
-| --- | --- | --- |
-| `Logging:LogLevel:Default` | `Information` | `false` |
-| `Secrets:ApiToken` | encrypted payload | `true` |
-
-Keys must be non-empty and unique without regard to case. Values can be null. The ADO.NET adapter reads the `IsEncrypted` column by default; with EF Core, map the marker from your own entity.
-
-## Add a source
-
-Adapters add the database source after JSON sources and before environment variables and command-line arguments:
+```json
+{
+  "ConnectionStrings": {
+    "ConfigurationDatabase": "Data Source=configuration.db"
+  }
+}
+```
 
 ```csharp
-builder.Configuration.AddAdoNetDatabaseConfiguration(databaseOptions);
+using Ling.Configuration.Database;
+using Microsoft.Data.Sqlite;
+
+var connectionString = builder.Configuration.GetConnectionString("ConfigurationDatabase")!;
+builder.Configuration.AddDatabase(connectionString, SqliteFactory.Instance, options =>
+{
+    options.PollingInterval = TimeSpan.FromSeconds(30);
+    options.TableName = "ConfigurationEntries";
+    options.Decryptor = entry => Decrypt(entry.Value!);
+});
 ```
 
-The database snapshot overrides earlier JSON values. Environment variables and command-line arguments keep their normal higher priority.
+`setupAction` is optional. The default query reads `ConfigKey`, `ConfigValue`, and `IsEncrypted` from `ConfigurationEntries`. `ConfigKey` must be non-empty and unique without regard to case. `ConfigValue` may be null. Set `EncryptionColumnName = null` when the table has no encryption marker column. Identifiers allow letters, digits, and underscores by default; configure `IdentifierQuoter` for provider-specific quoting.
 
-## Polling and reload
+The driver package supplies the `DbProviderFactory`. For SQL Server or PostgreSQL, install the corresponding driver and pass its factory with the connection string.
 
-The provider loads a complete snapshot during configuration startup and polls every 30 seconds by default. Change the interval in code:
+For a custom query, tenant filter, or nonstandard schema, implement `IDatabaseConfigurationLoader` and pass it to the `AddDatabase(loader, setupAction)` overload. The same snapshot validation, decryption, polling, and reload behavior applies.
 
-```csharp
-builder.Configuration.AddAdoNetDatabaseConfiguration(
-    databaseOptions,
-    options => options.PollingInterval = TimeSpan.FromMinutes(1));
+## Encrypted values
+
+Set `IsEncrypted` to `true` for rows that contain ciphertext. The optional `Decryptor` runs only for those rows. If it is missing or throws, the error is logged and the original stored value is used. Set `DatabaseConfigurationOptions.Logger` to use the application's logger; otherwise the error is written through `System.Diagnostics.Trace`.
+
+## Reload behavior
+
+The provider loads a complete snapshot when configuration is built, then polls every 30 seconds by default. It compares keys without regard to case and compares values ordinally. It updates the snapshot and triggers the standard reload token only when a key is added, removed, or changed. A failed poll keeps the last successful snapshot and later polls continue. Polls run serially.
+
+Add the provider after JSON sources. Environment variables and command-line arguments keep their normal higher priority. `IOptionsMonitor<T>` and services that read the injected `IConfiguration` again can observe updates. A regular value read once during service registration is a one-time snapshot.
+
+## Schema example
+
+```sql
+CREATE TABLE ConfigurationEntries (
+    ConfigKey TEXT NOT NULL PRIMARY KEY,
+    ConfigValue TEXT NULL,
+    IsEncrypted INTEGER NOT NULL DEFAULT 0
+);
 ```
 
-The provider compares keys without regard to case and values ordinally. It replaces the snapshot and signals a reload only when a key is added, removed, or changed. A polling failure leaves the last successful snapshot in place and polling continues. The first load must succeed.
+Adapt the types to the selected database. The library does not create or migrate this table; manage its schema with your database's usual migration mechanism.
 
-Use `IOptionsMonitor<T>` or read the current injected `IConfiguration` to observe reloaded values. Values copied into a service during registration or construction remain a startup snapshot.
+## Sample
 
-## Decrypt encrypted values
+[SQLite sample](https://github.com/ling921/ling-configuration-database/tree/master/samples/Ling.Configuration.Database.Sample) creates a local database table, loads a sample value, and demonstrates options reload.
 
-Mark encrypted rows with `IsEncrypted = true` and configure a decryptor:
-
-```csharp
-builder.Configuration.AddAdoNetDatabaseConfiguration(
-    databaseOptions,
-    options => options.Decryptor = entry =>
-        myDecryptor.Decrypt(entry.Key, entry.Value!));
+```shell
+dotnet run --project samples/Ling.Configuration.Database.Sample
 ```
-
-The synchronous decryptor receives the key and stored ciphertext. It runs for marked rows only. If no decryptor is configured, or decryption throws, the provider logs the exception and uses the stored ciphertext as the configuration value. Set `DatabaseConfigurationOptions.Logger` to use the application's logger; otherwise the error is written through `System.Diagnostics.Trace`.
-
-The package does not select an encryption algorithm or manage key storage and rotation. Obtain decryption keys from an independent secret-management system. See the adapter README for how to read the encryption marker from each database.
-
-## Custom loaders
-
-Implement `IDatabaseConfigurationLoader` when configuration rows need custom retrieval or transformation. Return a `ConfigurationEntry` for each row and set `IsEncrypted` when its value needs decryption.
 
 ## License
 
-[MIT](https://github.com/ling921/ling-configuration-database/blob/master/LICENSE)
+This project is licensed under the [MIT License](https://github.com/ling921/ling-configuration-database/blob/master/LICENSE).

@@ -7,6 +7,16 @@ public sealed class DatabaseConfigurationOptions
 {
     public TimeSpan PollingInterval { get; set; } = TimeSpan.FromSeconds(30);
 
+    public string TableName { get; set; } = "ConfigurationEntries";
+
+    public string KeyColumnName { get; set; } = "ConfigKey";
+
+    public string ValueColumnName { get; set; } = "ConfigValue";
+
+    public string? EncryptionColumnName { get; set; } = "IsEncrypted";
+
+    public Func<string, string>? IdentifierQuoter { get; set; }
+
     /// <summary>Synchronously decrypts values marked as encrypted in the database.</summary>
     public Func<ConfigurationEntry, string?>? Decryptor { get; set; }
 

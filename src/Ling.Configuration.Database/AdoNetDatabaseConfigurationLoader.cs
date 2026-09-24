@@ -1,19 +1,23 @@
 using System.Data.Common;
 using System.Globalization;
 using System.Text.RegularExpressions;
-using Ling.Configuration.Database;
 
-namespace Ling.Configuration.Database.AdoNet;
+namespace Ling.Configuration.Database;
 
-public sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfigurationLoader
+internal sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfigurationLoader
 {
-    private readonly AdoNetDatabaseConfigurationOptions _options;
+    private readonly string _connectionString;
+    private readonly DbProviderFactory _providerFactory;
+    private readonly DatabaseConfigurationOptions _options;
 
-    public AdoNetDatabaseConfigurationLoader(AdoNetDatabaseConfigurationOptions options)
+    public AdoNetDatabaseConfigurationLoader(
+        string connectionString,
+        DbProviderFactory providerFactory,
+        DatabaseConfigurationOptions options)
     {
-        _options = options ?? throw new ArgumentNullException(nameof(options));
-        ArgumentNullException.ThrowIfNull(_options.ProviderFactory);
-        ArgumentException.ThrowIfNullOrWhiteSpace(_options.ConnectionString);
+        _connectionString = connectionString;
+        _providerFactory = providerFactory;
+        _options = options;
         ArgumentException.ThrowIfNullOrWhiteSpace(_options.TableName);
         ArgumentException.ThrowIfNullOrWhiteSpace(_options.KeyColumnName);
         ArgumentException.ThrowIfNullOrWhiteSpace(_options.ValueColumnName);
@@ -41,16 +45,7 @@ public sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfigurationLo
         var entries = new List<ConfigurationEntry>();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
-            var key = Convert.ToString(reader.GetValue(0), CultureInfo.InvariantCulture);
-            if (key is null)
-            {
-                throw new InvalidOperationException("The database configuration key column returned NULL.");
-            }
-
-            var value = reader.IsDBNull(1) ? null : Convert.ToString(reader.GetValue(1), CultureInfo.InvariantCulture);
-            var isEncrypted = reader.FieldCount > 2 && !reader.IsDBNull(2)
-                && Convert.ToBoolean(reader.GetValue(2), CultureInfo.InvariantCulture);
-            entries.Add(new ConfigurationEntry(key, value, isEncrypted));
+            entries.Add(ReadEntry(reader));
         }
 
         return entries;
@@ -58,9 +53,9 @@ public sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfigurationLo
 
     private DbConnection CreateConnection()
     {
-        var connection = _options.ProviderFactory.CreateConnection()
+        var connection = _providerFactory.CreateConnection()
             ?? throw new InvalidOperationException("The configured provider factory could not create a connection.");
-        connection.ConnectionString = _options.ConnectionString;
+        connection.ConnectionString = _connectionString;
         return connection;
     }
 
@@ -87,23 +82,28 @@ public sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfigurationLo
         return command;
     }
 
-    private static IReadOnlyCollection<ConfigurationEntry> ReadEntries(DbDataReader reader)
+    private IReadOnlyCollection<ConfigurationEntry> ReadEntries(DbDataReader reader)
     {
         var entries = new List<ConfigurationEntry>();
         while (reader.Read())
         {
-            var key = Convert.ToString(reader.GetValue(0), CultureInfo.InvariantCulture);
-            if (key is null)
-            {
-                throw new InvalidOperationException("The database configuration key column returned NULL.");
-            }
-
-            var value = reader.IsDBNull(1) ? null : Convert.ToString(reader.GetValue(1), CultureInfo.InvariantCulture);
-            var isEncrypted = reader.FieldCount > 2 && !reader.IsDBNull(2)
-                && Convert.ToBoolean(reader.GetValue(2), CultureInfo.InvariantCulture);
-            entries.Add(new ConfigurationEntry(key, value, isEncrypted));
+            entries.Add(ReadEntry(reader));
         }
 
         return entries;
+    }
+
+    private ConfigurationEntry ReadEntry(DbDataReader reader)
+    {
+        var key = Convert.ToString(reader.GetValue(0), CultureInfo.InvariantCulture);
+        if (key is null)
+        {
+            throw new InvalidOperationException("The database configuration key column returned NULL.");
+        }
+
+        var value = reader.IsDBNull(1) ? null : Convert.ToString(reader.GetValue(1), CultureInfo.InvariantCulture);
+        var isEncrypted = reader.FieldCount > 2 && !reader.IsDBNull(2)
+            && Convert.ToBoolean(reader.GetValue(2), CultureInfo.InvariantCulture);
+        return new ConfigurationEntry(key, value, isEncrypted);
     }
 }

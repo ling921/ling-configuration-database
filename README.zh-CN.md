@@ -5,32 +5,18 @@
 [![构建](https://github.com/ling921/ling-configuration-database/actions/workflows/build.yml/badge.svg)](https://github.com/ling921/ling-configuration-database/actions/workflows/build.yml)
 [![NuGet](https://img.shields.io/nuget/v/Ling.Configuration.Database.svg)](https://www.nuget.org/packages/Ling.Configuration.Database/)
 
-为 `Microsoft.Extensions.Configuration` 提供数据库配置源，支持定时轮询和变更通知。
+基于 ADO.NET 的 `Microsoft.Extensions.Configuration` 配置提供程序，支持定时轮询和重载通知。项目只发布一个 NuGet 包；数据库驱动由使用方单独安装。
 
-## NuGet 包
+## 安装
 
-| 包 | 用途 |
-| --- | --- |
-| `Ling.Configuration.Database` | 配置提供程序接口、快照校验、重载和变化检测。 |
-| `Ling.Configuration.Database.AdoNet` | ADO.NET 工厂适配器。 |
-| `Ling.Configuration.Database.EntityFrameworkCore` | EF Core 查询适配器。 |
+```shell
+dotnet add package Ling.Configuration.Database
+dotnet add package Microsoft.Data.Sqlite
+```
 
-安装核心包和需要的适配器。数据库驱动由应用单独安装，例如 `Microsoft.Data.Sqlite`、`Microsoft.Data.SqlClient` 或 `Npgsql`。
+## 使用
 
-EF Core 适配器分别面向 .NET 8、9、10，并引用对应主版本的 EF Core。
-
-## 数据格式
-
-ADO.NET 适配器默认读取 `ConfigurationEntries` 表的 `ConfigKey`、`ConfigValue` 和 `IsEncrypted` 列。`ConfigKey` 非空且不区分大小写唯一，`ConfigValue` 可以为空；数据库中建议将 `IsEncrypted` 默认设为 `false`。EF Core 应用在自己的实体中映射对应字段。配置键使用冒号分隔的标准层级格式：
-
-| ConfigKey | ConfigValue | IsEncrypted |
-| --- | --- | --- |
-| `Logging:LogLevel:Default` | `Information` | `false` |
-| `Secrets:ApiToken` | 加密后的内容 | `true` |
-
-`IsEncrypted = true` 的行会在进入配置快照前交给解密器；普通行不会调用解密器。若未配置解密器或解密器抛出异常，会记录异常并使用数据库密文作为配置值。设置 `DatabaseConfigurationOptions.Logger` 可使用应用的日志记录器。EF Core 由应用自己的实体映射该标记列，ADO.NET 可以配置或关闭标记列。
-
-配置数据库的连接字符串放在应用自己的引导配置中，通常使用 `ConnectionStrings`。在添加本提供程序之前读取连接字符串；本提供程序使用注册时取得的连接字符串，之后从数据库读取到的同名配置不会改变它正在使用的连接。
+添加数据库配置源之前，先从引导配置读取连接字符串。调用 `AddDatabase` 时会捕获该连接字符串，数据库加载的值不会改变此配置源使用的连接。
 
 ```json
 {
@@ -40,67 +26,54 @@ ADO.NET 适配器默认读取 `ConfigurationEntries` 表的 `ConfigKey`、`Confi
 }
 ```
 
-## ADO.NET 接入
-
 ```csharp
-using Ling.Configuration.Database.AdoNet;
+using Ling.Configuration.Database;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Configuration;
 
 var connectionString = builder.Configuration.GetConnectionString("ConfigurationDatabase")!;
-builder.Configuration.AddAdoNetDatabaseConfiguration(new()
+builder.Configuration.AddDatabase(connectionString, SqliteFactory.Instance, options =>
 {
-    ProviderFactory = SqliteFactory.Instance,
-    ConnectionString = connectionString,
-    TableName = "ConfigurationEntries"
+    options.PollingInterval = TimeSpan.FromSeconds(30);
+    options.TableName = "ConfigurationEntries";
+    options.Decryptor = entry => Decrypt(entry.Value!);
 });
 ```
 
-默认标识符仅允许字母、数字和下划线。数据库需要引用标识符或配置了保留字时，可设置 `IdentifierQuoter`。
+`setupAction` 是可选的。默认查询从 `ConfigurationEntries` 表读取 `ConfigKey`、`ConfigValue` 和 `IsEncrypted`。`ConfigKey` 不能为空，且不区分大小写唯一；`ConfigValue` 可以为 null。如果表没有加密标记列，将 `EncryptionColumnName` 设为 `null`。默认标识符只允许字母、数字和下划线；可通过 `IdentifierQuoter` 配置数据库特定的引用方式。
 
-SQL Server、PostgreSQL 等数据库使用各自驱动包提供的 `DbProviderFactory`。
+数据库驱动包提供 `DbProviderFactory`。使用 SQL Server、PostgreSQL 等数据库时，安装对应驱动并传入其工厂与连接字符串。
 
-## EF Core 接入
+如果需要自定义查询、租户筛选或特殊表结构，可以实现 `IDatabaseConfigurationLoader`，并传给 `AddDatabase(loader, setupAction)` 重载。此方式仍使用相同的快照校验、解密、轮询和重载逻辑。
 
-```csharp
-using Ling.Configuration.Database;
-using Ling.Configuration.Database.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
+## 加密值
 
-var connectionString = builder.Configuration.GetConnectionString("ConfigurationDatabase")!;
-IDbContextFactory<SettingsContext> contextFactory = CreateSettingsContextFactory(connectionString);
-builder.Configuration.AddEntityFrameworkCoreDatabaseConfiguration<SettingsContext, Setting>(
-    contextFactory,
-    context => context.Settings.AsNoTracking(),
-    setting => new ConfigurationEntry(setting.ConfigKey, setting.ConfigValue, setting.IsEncrypted),
-    options => options.Decryptor = entry => myDecryptor.Decrypt(entry.Key, entry.Value!));
+加密存储的记录将 `IsEncrypted` 设为 `true`。可选的 `Decryptor` 只会处理这类记录。若未配置解密器或解密器抛出异常，会记录异常并使用数据库中的原始值。设置 `DatabaseConfigurationOptions.Logger` 可使用应用的日志记录器；未设置时会写入 `System.Diagnostics.Trace`。
+
+## 重载行为
+
+构建配置时会读取完整快照，之后默认每 30 秒轮询一次。键名比较不区分大小写，值使用序数比较。只有键新增、删除或值变化时才替换快照并触发标准重载令牌。轮询失败时保留上次成功的快照，并在后续继续轮询。轮询按顺序执行，不会重叠。
+
+请将数据库配置源添加在 JSON 源之后。环境变量和命令行参数仍保持原有的更高优先级。`IOptionsMonitor<T>` 和再次读取注入的 `IConfiguration` 的服务可以获得更新；在服务注册时读取并保存的普通值是一次性快照。
+
+## 表结构示例
+
+```sql
+CREATE TABLE ConfigurationEntries (
+    ConfigKey TEXT NOT NULL PRIMARY KEY,
+    ConfigValue TEXT NULL,
+    IsEncrypted INTEGER NOT NULL DEFAULT 0
+);
 ```
 
-适配器会在启动加载和每次轮询时创建并释放一个上下文。若应用已有 `IDbContextFactory<TContext>`，可直接传入；否则可使用与应用相同的 `DbContextOptions` 配置创建工厂。不要传入某个请求作用域中的 `DbContext` 实例：配置源的生命周期长于请求作用域，而且 EF Core 上下文不支持并发使用。工厂应直接使用引导配置，不能依赖配置构建完成后才创建的应用服务容器。
-
-## 重载语义
-
-启动时读取完整快照，之后默认每 30 秒轮询一次。可通过 `options => options.PollingInterval = TimeSpan.FromMinutes(1)` 在代码中调整；如有需要，也可以由调用方从自己的配置键读取。只有配置键新增、删除或值变化时才替换快照并触发标准重载通知。轮询失败时保留上次成功的快照并继续重试。
-
-数据库源应添加在 JSON 配置之后；环境变量和命令行参数仍具有更高优先级。
-
-使用 `IOptionsMonitor<T>` 的服务会收到更新后的选项。在注册服务或构造单例时读取并保存的普通值只代表启动时快照；也可以在需要当前值时读取注入的 `IConfiguration`。
-
-配置源按应用级工作。调用方可以通过查询或连接工厂选择租户配置；本库不在 `IConfiguration` 中内建租户上下文。
+请根据所用数据库调整列类型。本库不会创建或迁移该表；请使用数据库项目已有的迁移方式管理表结构。
 
 ## 示例
 
-每个适配器都有独立的可运行示例：
+[SQLite 示例](samples/Ling.Configuration.Database.Sample) 会创建本地数据库表、读取示例值并演示选项重载。
 
-- **[ADO.NET + SQLite](samples/Ling.Configuration.Database.AdoNet.Sample)** — 创建本地 SQLite 表、加载示例值并观察选项重载。
-  运行：`dotnet run --project samples/Ling.Configuration.Database.AdoNet.Sample`
-- **[EF Core + SQLite](samples/Ling.Configuration.Database.EntityFrameworkCore.Sample)** — 使用 `IDbContextFactory<TContext>` 和包含 `IsEncrypted` 标记的 EF 实体。
-  运行：`dotnet run --project samples/Ling.Configuration.Database.EntityFrameworkCore.Sample`
-
-## 安全
-
-本提供程序可通过应用提供的回调解密已标记的记录，但不指定加密算法，也不管理密钥。请通过数据库权限控制、TLS 和数据库静态加密保护数据，并从独立于此数据库的位置获取解密密钥。
+```shell
+dotnet run --project samples/Ling.Configuration.Database.Sample
+```
 
 ## 许可证
 

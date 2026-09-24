@@ -1,4 +1,4 @@
-using Ling.Configuration.Database.AdoNet;
+using Ling.Configuration.Database;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,10 +27,9 @@ await using (var connection = new SqliteConnection(connectionString))
     }
 }
 
-builder.Configuration.AddAdoNetDatabaseConfiguration(new AdoNetDatabaseConfigurationOptions
+builder.Configuration.AddDatabase(connectionString, SqliteFactory.Instance, options =>
 {
-    ProviderFactory = SqliteFactory.Instance,
-    ConnectionString = connectionString
+    options.TableName = "ConfigurationEntries";
 });
 builder.Services.Configure<SampleOptions>(builder.Configuration.GetSection("Sample"));
 

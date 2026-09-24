@@ -5,32 +5,18 @@ English | [简体中文](README.zh-CN.md)
 [![Build](https://github.com/ling921/ling-configuration-database/actions/workflows/build.yml/badge.svg)](https://github.com/ling921/ling-configuration-database/actions/workflows/build.yml)
 [![NuGet](https://img.shields.io/nuget/v/Ling.Configuration.Database.svg)](https://www.nuget.org/packages/Ling.Configuration.Database/)
 
-Database-backed `Microsoft.Extensions.Configuration` with automatic polling and reload notifications.
+An ADO.NET backed `Microsoft.Extensions.Configuration` provider with polling reload support. It is distributed as one package; install the ADO.NET driver you want to use separately.
 
-## Packages
+## Install
 
-| Package | Purpose |
-| --- | --- |
-| `Ling.Configuration.Database` | Provider contracts, snapshot validation, reload and change detection. |
-| `Ling.Configuration.Database.AdoNet` | ADO.NET provider-factory adapter. |
-| `Ling.Configuration.Database.EntityFrameworkCore` | EF Core query adapter. |
+```shell
+dotnet add package Ling.Configuration.Database
+dotnet add package Microsoft.Data.Sqlite
+```
 
-Install the core package and one adapter. Install the database driver's package separately, such as `Microsoft.Data.Sqlite`, `Microsoft.Data.SqlClient`, or `Npgsql`.
+## Usage
 
-The EF Core adapter targets .NET 8, 9, and 10 with the corresponding EF Core major version.
-
-## Storage
-
-The ADO.NET adapter defaults to the `ConfigurationEntries` table with `ConfigKey`, `ConfigValue`, and `IsEncrypted` columns. `ConfigKey` is a non-empty, case-insensitive unique key; `ConfigValue` can be null; set the database column default for `IsEncrypted` to `false`. EF Core applications map the equivalent fields in their own entity. Keys use the normal colon-separated configuration format:
-
-| ConfigKey | ConfigValue | IsEncrypted |
-| --- | --- | --- |
-| `Logging:LogLevel:Default` | `Information` | `false` |
-| `Secrets:ApiToken` | encrypted payload | `true` |
-
-Rows marked `IsEncrypted = true` are passed to the configured decryptor before they enter the configuration snapshot. Plain rows do not use the decryptor. If no decryptor is configured or it throws, the error is logged and the stored ciphertext is used. Configure `DatabaseConfigurationOptions.Logger` to use the application's logger. The EF Core adapter lets the application map this marker through its own entity; ADO.NET can configure or disable the marker column.
-
-Keep the configuration database connection string in the application's normal bootstrap configuration, usually under `ConnectionStrings`. Read it before adding this provider. The database source uses the connection string captured at registration time; values loaded later do not change its active connection.
+Read the bootstrap connection string before adding the database source. It is captured when `AddDatabase` is called, so a value loaded from the database cannot change the connection used by this provider.
 
 ```json
 {
@@ -40,67 +26,54 @@ Keep the configuration database connection string in the application's normal bo
 }
 ```
 
-## ADO.NET
-
 ```csharp
-using Ling.Configuration.Database.AdoNet;
+using Ling.Configuration.Database;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Configuration;
 
 var connectionString = builder.Configuration.GetConnectionString("ConfigurationDatabase")!;
-builder.Configuration.AddAdoNetDatabaseConfiguration(new()
+builder.Configuration.AddDatabase(connectionString, SqliteFactory.Instance, options =>
 {
-    ProviderFactory = SqliteFactory.Instance,
-    ConnectionString = connectionString,
-    TableName = "ConfigurationEntries"
+    options.PollingInterval = TimeSpan.FromSeconds(30);
+    options.TableName = "ConfigurationEntries";
+    options.Decryptor = entry => Decrypt(entry.Value!);
 });
 ```
 
-Identifiers use letters, digits, and underscores by default. Set `IdentifierQuoter` when a provider needs quoted identifiers or when a configured name is reserved by that database.
+`setupAction` is optional. The default query reads `ConfigKey`, `ConfigValue`, and `IsEncrypted` from `ConfigurationEntries`. `ConfigKey` must be non-empty and unique without regard to case. `ConfigValue` may be null. Set `EncryptionColumnName = null` when the table has no encryption marker column. Identifiers allow letters, digits, and underscores by default; configure `IdentifierQuoter` for provider-specific quoting.
 
-Use the database provider's `DbProviderFactory` and driver package for SQL Server, PostgreSQL, or another ADO.NET database.
+The driver package supplies the `DbProviderFactory`. For SQL Server or PostgreSQL, install the corresponding driver and pass its factory with the connection string.
 
-## Entity Framework Core
+For a custom query, tenant filter, or nonstandard schema, implement `IDatabaseConfigurationLoader` and pass it to the `AddDatabase(loader, setupAction)` overload. The same snapshot validation, decryption, polling, and reload behavior applies.
 
-```csharp
-using Ling.Configuration.Database;
-using Ling.Configuration.Database.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
+## Encrypted values
 
-var connectionString = builder.Configuration.GetConnectionString("ConfigurationDatabase")!;
-IDbContextFactory<SettingsContext> contextFactory = CreateSettingsContextFactory(connectionString);
-builder.Configuration.AddEntityFrameworkCoreDatabaseConfiguration<SettingsContext, Setting>(
-    contextFactory,
-    context => context.Settings.AsNoTracking(),
-    setting => new ConfigurationEntry(setting.ConfigKey, setting.ConfigValue, setting.IsEncrypted),
-    options => options.Decryptor = entry => myDecryptor.Decrypt(entry.Key, entry.Value!));
-```
-
-The adapter creates and disposes a context for the initial load and every poll. Pass an existing `IDbContextFactory<TContext>` when available, or construct one from the same `DbContextOptions` setup used by the application. Do not pass a scoped `DbContext` instance: configuration outlives a request scope, and EF Core contexts are not thread safe. The factory must use bootstrap settings directly and cannot depend on the application service provider that is built after configuration.
+Set `IsEncrypted` to `true` for rows that contain ciphertext. The optional `Decryptor` runs only for those rows. If it is missing or throws, the error is logged and the original stored value is used. Set `DatabaseConfigurationOptions.Logger` to use the application's logger; otherwise the error is written through `System.Diagnostics.Trace`.
 
 ## Reload behavior
 
-The provider loads one complete snapshot at startup, then polls every 30 seconds by default. Change the interval in code with `options => options.PollingInterval = TimeSpan.FromMinutes(1)`, or read a setting from an application-owned key if needed. It replaces the snapshot and raises the standard configuration reload token only when a key is added, removed, or changed. If a poll fails, the last successful snapshot remains active and polling continues.
+The provider loads a complete snapshot when configuration is built, then polls every 30 seconds by default. It compares keys without regard to case and compares values ordinally. It updates the snapshot and triggers the standard reload token only when a key is added, removed, or changed. A failed poll keeps the last successful snapshot and later polls continue. Polls run serially.
 
-Environment variables and command-line arguments retain their usual higher priority. Add the database source after JSON configuration so database values replace ordinary JSON values.
+Add the provider after JSON sources. Environment variables and command-line arguments keep their normal higher priority. `IOptionsMonitor<T>` and services that read the injected `IConfiguration` again can observe updates. A regular value read once during service registration is a one-time snapshot.
 
-Services that use `IOptionsMonitor<T>` receive updated options. A value read once while registering or constructing a singleton remains a startup snapshot; a service can also read the injected `IConfiguration` when it needs the current value.
+## Schema example
 
-The source is application scoped. Applications can select a tenant's rows in their query or connection factory; tenant context is not built into `IConfiguration`.
+```sql
+CREATE TABLE ConfigurationEntries (
+    ConfigKey TEXT NOT NULL PRIMARY KEY,
+    ConfigValue TEXT NULL,
+    IsEncrypted INTEGER NOT NULL DEFAULT 0
+);
+```
 
-## Samples
+Adapt the types to the selected database. The library does not create or migrate this table; manage its schema with your database's usual migration mechanism.
 
-Each adapter has a runnable sample:
+## Sample
 
-- **[ADO.NET with SQLite](samples/Ling.Configuration.Database.AdoNet.Sample)** — Creates a local SQLite table, loads a sample value, and observes options reloads.
-  Run: `dotnet run --project samples/Ling.Configuration.Database.AdoNet.Sample`
-- **[EF Core with SQLite](samples/Ling.Configuration.Database.EntityFrameworkCore.Sample)** — Uses `IDbContextFactory<TContext>` and an EF entity with the `IsEncrypted` marker.
-  Run: `dotnet run --project samples/Ling.Configuration.Database.EntityFrameworkCore.Sample`
+[SQLite sample](samples/Ling.Configuration.Database.Sample) creates a local database table, loads a sample value, and demonstrates options reload.
 
-## Security
-
-The provider can decrypt explicitly marked rows through an application-supplied callback, but it does not choose an encryption algorithm or manage keys. Protect the database with appropriate access controls, TLS, and at-rest encryption. Obtain decryption keys independently of this database.
+```shell
+dotnet run --project samples/Ling.Configuration.Database.Sample
+```
 
 ## License
 

@@ -14,7 +14,7 @@ public sealed class DatabaseConfigurationProviderTests
     {
         var root = new ConfigurationBuilder()
             .AddJsonStream(new MemoryStream("{\"Logging\":{\"LogLevel\":{\"Default\":\"Warning\"}}}"u8.ToArray()))
-            .AddDatabaseConfiguration(new MutableLoader([new("Logging:LogLevel:Default", "Information"), new("Feature:Enabled", "true")]))
+            .AddDatabase(new MutableLoader([new("Logging:LogLevel:Default", "Information"), new("Feature:Enabled", "true")]))
             .Build();
         using var lifetime = (IDisposable)root;
 
@@ -26,7 +26,7 @@ public sealed class DatabaseConfigurationProviderTests
     public void DecryptsOnlyEntriesMarkedAsEncrypted()
     {
         var root = new ConfigurationBuilder()
-            .AddDatabaseConfiguration(
+            .AddDatabase(
                 new MutableLoader([
                     new("Secrets:Token", "cipher-text", IsEncrypted: true),
                     new("Feature:Enabled", "true")]),
@@ -44,7 +44,7 @@ public sealed class DatabaseConfigurationProviderTests
     {
         var logger = new RecordingLogger();
         var root = new ConfigurationBuilder()
-            .AddDatabaseConfiguration(
+            .AddDatabase(
                 new MutableLoader([new("Secrets:Token", "cipher-text", IsEncrypted: true)]),
                 options => options.Logger = logger)
             .Build();
@@ -59,7 +59,7 @@ public sealed class DatabaseConfigurationProviderTests
     public void UsesCiphertextWhenDecryptorThrows()
     {
         var root = new ConfigurationBuilder()
-            .AddDatabaseConfiguration(
+            .AddDatabase(
                 new MutableLoader([new("Secrets:Token", "cipher-text", IsEncrypted: true)]),
                 options => options.Decryptor = _ => throw new CryptographicException("Bad key."))
             .Build();
@@ -73,7 +73,7 @@ public sealed class DatabaseConfigurationProviderTests
     public void AllowsConnectionStringKeysAndRejectsDuplicateKeysDuringInitialLoad()
     {
         var root = new ConfigurationBuilder()
-            .AddDatabaseConfiguration(new MutableLoader([new("ConnectionStrings:ConfigurationDatabase", "value")]))
+            .AddDatabase(new MutableLoader([new("ConnectionStrings:ConfigurationDatabase", "value")]))
             .Build();
         using ((IDisposable)root)
         {
@@ -81,7 +81,7 @@ public sealed class DatabaseConfigurationProviderTests
         }
 
         Assert.Throws<InvalidOperationException>(() => new ConfigurationBuilder()
-            .AddDatabaseConfiguration(new MutableLoader([new("Case:Key", "one"), new("case:key", "two")]))
+            .AddDatabase(new MutableLoader([new("Case:Key", "one"), new("case:key", "two")]))
             .Build());
     }
 
@@ -90,7 +90,7 @@ public sealed class DatabaseConfigurationProviderTests
     {
         var loader = new MutableLoader([new("Feature:Enabled", "false")]);
         var root = new ConfigurationBuilder()
-            .AddDatabaseConfiguration(loader, options => options.PollingInterval = TimeSpan.FromMilliseconds(50))
+            .AddDatabase(loader, options => options.PollingInterval = TimeSpan.FromMilliseconds(50))
             .Build();
         using var lifetime = (IDisposable)root;
 
@@ -120,7 +120,7 @@ public sealed class DatabaseConfigurationProviderTests
     {
         var loader = new MutableLoader([new("Sample:Message", "first")]);
         var root = new ConfigurationBuilder()
-            .AddDatabaseConfiguration(loader, options => options.PollingInterval = TimeSpan.FromMilliseconds(40))
+            .AddDatabase(loader, options => options.PollingInterval = TimeSpan.FromMilliseconds(40))
             .Build();
         using var lifetime = (IDisposable)root;
         var services = new ServiceCollection();
@@ -141,7 +141,7 @@ public sealed class DatabaseConfigurationProviderTests
     {
         var loader = new SlowLoader();
         var root = new ConfigurationBuilder()
-            .AddDatabaseConfiguration(loader, options => options.PollingInterval = TimeSpan.FromMilliseconds(15))
+            .AddDatabase(loader, options => options.PollingInterval = TimeSpan.FromMilliseconds(15))
             .Build();
         var lifetime = (IDisposable)root;
         await Task.Delay(160);
@@ -161,7 +161,7 @@ public sealed class DatabaseConfigurationProviderTests
             .AddEnvironmentVariables()
             .AddCommandLine([]);
 
-        builder.AddDatabaseConfiguration(new MutableLoader([]));
+        builder.AddDatabase(new MutableLoader([]));
 
         Assert.IsType<DatabaseConfigurationSource>(builder.Sources[1]);
     }
@@ -175,7 +175,7 @@ public sealed class DatabaseConfigurationProviderTests
         try
         {
             var environmentRoot = new ConfigurationBuilder()
-                .AddDatabaseConfiguration(new MutableLoader([new("Feature:Enabled", "database")]))
+                .AddDatabase(new MutableLoader([new("Feature:Enabled", "database")]))
                 .AddEnvironmentVariables("LING_CONFIG_TEST_")
                 .Build();
             using ((IDisposable)environmentRoot)
@@ -184,7 +184,7 @@ public sealed class DatabaseConfigurationProviderTests
             }
 
             var commandLineRoot = new ConfigurationBuilder()
-                .AddDatabaseConfiguration(new MutableLoader([new("Feature:Enabled", "database")]))
+                .AddDatabase(new MutableLoader([new("Feature:Enabled", "database")]))
                 .AddCommandLine(["Feature:Enabled=command"])
                 .Build();
             using ((IDisposable)commandLineRoot)

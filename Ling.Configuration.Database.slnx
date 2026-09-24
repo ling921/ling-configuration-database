@@ -1,17 +1,12 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Ling.Configuration.Database/Ling.Configuration.Database.csproj" />
-    <Project Path="src/Ling.Configuration.Database.AdoNet/Ling.Configuration.Database.AdoNet.csproj" />
-    <Project Path="src/Ling.Configuration.Database.EntityFrameworkCore/Ling.Configuration.Database.EntityFrameworkCore.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Ling.Configuration.Database.Tests/Ling.Configuration.Database.Tests.csproj" />
-    <Project Path="tests/Ling.Configuration.Database.AdoNet.Tests/Ling.Configuration.Database.AdoNet.Tests.csproj" />
-    <Project Path="tests/Ling.Configuration.Database.EntityFrameworkCore.Tests/Ling.Configuration.Database.EntityFrameworkCore.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
-    <Project Path="samples/Ling.Configuration.Database.AdoNet.Sample/Ling.Configuration.Database.AdoNet.Sample.csproj" />
-    <Project Path="samples/Ling.Configuration.Database.EntityFrameworkCore.Sample/Ling.Configuration.Database.EntityFrameworkCore.Sample.csproj" />
+    <Project Path="samples/Ling.Configuration.Database.Sample/Ling.Configuration.Database.Sample.csproj" />
   </Folder>
   <Folder Name="/Solution items/">
     <File Path=".editorconfig" />

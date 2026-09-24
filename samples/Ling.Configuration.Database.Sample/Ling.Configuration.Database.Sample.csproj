@@ -4,7 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Ling.Configuration.Database.AdoNet/Ling.Configuration.Database.AdoNet.csproj" />
+    <ProjectReference Include="../../src/Ling.Configuration.Database/Ling.Configuration.Database.csproj" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.31" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="8.0.0" />
