@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>Ling.Configuration.Database</PackageId>
     <Title>Ling.Configuration.Database</Title>
     <Description>Database backed Microsoft.Extensions.Configuration provider with polling reload support.</Description>

@@ -3,6 +3,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Ling.Configuration.Database;
 
+/// <summary>
+/// Loads configuration snapshots from a database and reloads them when they
+/// change.
+/// </summary>
 public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisposable
 {
     private readonly IDatabaseConfigurationLoader _loader;
@@ -12,6 +16,15 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
     private int _started;
     private int _disposed;
 
+    /// <summary>
+    /// Initializes a new database configuration provider.
+    /// </summary>
+    /// <param name="loader">
+    /// The loader used to read configuration snapshots.
+    /// </param>
+    /// <param name="options">
+    /// The options used to poll and process values.
+    /// </param>
     public DatabaseConfigurationProvider(IDatabaseConfigurationLoader loader, DatabaseConfigurationOptions options)
     {
         _loader = loader ?? throw new ArgumentNullException(nameof(loader));
@@ -22,6 +35,9 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
         }
     }
 
+    /// <summary>
+    /// Loads the initial database snapshot and starts background polling.
+    /// </summary>
     public override void Load()
     {
         var initial = ValidateAndCreateSnapshot(_loader.Load());
@@ -32,6 +48,10 @@ public sealed class DatabaseConfigurationProvider : ConfigurationProvider, IDisp
         }
     }
 
+    /// <summary>
+    /// Stops background polling and releases the resources used by this
+    /// provider.
+    /// </summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)

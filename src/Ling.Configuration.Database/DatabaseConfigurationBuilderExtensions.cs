@@ -6,9 +6,30 @@ using Microsoft.Extensions.Configuration.Json;
 
 namespace Ling.Configuration.Database;
 
+/// <summary>
+/// Provides extension methods for adding database configuration sources.
+/// </summary>
 public static class DatabaseConfigurationBuilderExtensions
 {
-    /// <summary>Adds a database source after JSON sources and before environment and command-line sources.</summary>
+    /// <summary>
+    /// Adds an ADO.NET database source after JSON sources and before
+    /// environment-variable and command-line sources.
+    /// </summary>
+    /// <param name="builder">
+    /// The configuration builder to add the source to.
+    /// </param>
+    /// <param name="connectionString">
+    /// The connection string used to read configuration values.
+    /// </param>
+    /// <param name="dbProviderFactory">
+    /// The provider factory used to create database connections.
+    /// </param>
+    /// <param name="setupAction">
+    /// An optional callback for configuring polling, schema, and value handling.
+    /// </param>
+    /// <returns>
+    /// The configuration builder.
+    /// </returns>
     public static IConfigurationBuilder AddDatabase(
         this IConfigurationBuilder builder,
         string connectionString,
@@ -29,7 +50,22 @@ public static class DatabaseConfigurationBuilderExtensions
         return builder;
     }
 
-    /// <summary>Adds a database source after JSON sources and before environment and command-line sources.</summary>
+    /// <summary>
+    /// Adds a database source that uses a custom configuration loader after
+    /// JSON sources and before environment-variable and command-line sources.
+    /// </summary>
+    /// <param name="builder">
+    /// The configuration builder to add the source to.
+    /// </param>
+    /// <param name="loader">
+    /// The loader that reads complete configuration snapshots.
+    /// </param>
+    /// <param name="setupAction">
+    /// An optional callback for configuring polling and value handling.
+    /// </param>
+    /// <returns>
+    /// The configuration builder.
+    /// </returns>
     public static IConfigurationBuilder AddDatabase(
         this IConfigurationBuilder builder,
         IDatabaseConfigurationLoader loader,

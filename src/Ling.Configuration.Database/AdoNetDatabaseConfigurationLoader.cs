@@ -10,6 +10,19 @@ internal sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfiguration
     private readonly DbProviderFactory _providerFactory;
     private readonly DatabaseConfigurationOptions _options;
 
+    /// <summary>
+    /// Initializes a loader with a connection string, provider factory, and
+    /// database schema options.
+    /// </summary>
+    /// <param name="connectionString">
+    /// The connection string for the database.
+    /// </param>
+    /// <param name="providerFactory">
+    /// The factory used to create database connections.
+    /// </param>
+    /// <param name="options">
+    /// The schema and value-processing options.
+    /// </param>
     public AdoNetDatabaseConfigurationLoader(
         string connectionString,
         DbProviderFactory providerFactory,
@@ -27,6 +40,12 @@ internal sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfiguration
         }
     }
 
+    /// <summary>
+    /// Loads all configuration entries from the database synchronously.
+    /// </summary>
+    /// <returns>
+    /// The configuration entries read from the database.
+    /// </returns>
     public IReadOnlyCollection<ConfigurationEntry> Load()
     {
         using var connection = CreateConnection();
@@ -36,6 +55,15 @@ internal sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfiguration
         return ReadEntries(reader);
     }
 
+    /// <summary>
+    /// Loads all configuration entries from the database asynchronously.
+    /// </summary>
+    /// <param name="cancellationToken">
+    /// A token that can cancel the operation.
+    /// </param>
+    /// <returns>
+    /// A task containing the configuration entries.
+    /// </returns>
     public async ValueTask<IReadOnlyCollection<ConfigurationEntry>> LoadAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = CreateConnection();
