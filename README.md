@@ -50,9 +50,12 @@ Example bootstrap settings:
 ```csharp
 using Ling.Configuration.Database.AdoNet;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Configuration;
 
 var connectionString = builder.Configuration["Ling:Configuration:Database:ConnectionString"]!;
-var pollingInterval = TimeSpan.Parse(builder.Configuration["Ling:Configuration:Database:PollingInterval"] ?? "00:00:30");
+var pollingInterval = builder.Configuration
+    .GetSection("Ling:Configuration:Database:PollingInterval")
+    .Get<TimeSpan?>() ?? TimeSpan.FromSeconds(30);
 builder.Configuration.AddAdoNetDatabaseConfiguration(new()
 {
     ProviderFactory = SqliteFactory.Instance,
@@ -71,17 +74,21 @@ Use the database provider's `DbProviderFactory` and driver package for SQL Serve
 using Ling.Configuration.Database;
 using Ling.Configuration.Database.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 var connectionString = builder.Configuration["Ling:Configuration:Database:ConnectionString"]!;
-var pollingInterval = TimeSpan.Parse(builder.Configuration["Ling:Configuration:Database:PollingInterval"] ?? "00:00:30");
+var pollingInterval = builder.Configuration
+    .GetSection("Ling:Configuration:Database:PollingInterval")
+    .Get<TimeSpan?>() ?? TimeSpan.FromSeconds(30);
+IDbContextFactory<SettingsContext> contextFactory = CreateSettingsContextFactory(connectionString);
 builder.Configuration.AddEntityFrameworkCoreDatabaseConfiguration<SettingsContext, Setting>(
-    () => new SettingsContext(connectionString),
+    contextFactory,
     context => context.Settings.AsNoTracking(),
     setting => new ConfigurationEntry(setting.Key, setting.Value),
     options => options.PollingInterval = pollingInterval);
 ```
 
-The context factory is used for initial loading and every poll. It must use bootstrap settings directly and must not depend on the application service provider that is built after configuration.
+The adapter creates and disposes a context for the initial load and every poll. Pass an existing `IDbContextFactory<TContext>` when available, or construct one from the same `DbContextOptions` setup used by the application. Do not pass a scoped `DbContext` instance: configuration outlives a request scope, and EF Core contexts are not thread safe. The factory must use bootstrap settings directly and cannot depend on the application service provider that is built after configuration.
 
 ## Reload behavior
 
@@ -92,3 +99,7 @@ Environment variables and command-line arguments retain their usual higher prior
 Services that use `IOptionsMonitor<T>` receive updated options. A value read once while registering or constructing a singleton remains a startup snapshot; a service can also read the injected `IConfiguration` when it needs the current value.
 
 The source is application scoped. Applications can select a tenant's rows in their query or connection factory; tenant context is not built into `IConfiguration`.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

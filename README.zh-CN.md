@@ -50,9 +50,12 @@ EF Core 适配器分别面向 .NET 8、9、10，并引用对应主版本的 EF C
 ```csharp
 using Ling.Configuration.Database.AdoNet;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Configuration;
 
 var connectionString = builder.Configuration["Ling:Configuration:Database:ConnectionString"]!;
-var pollingInterval = TimeSpan.Parse(builder.Configuration["Ling:Configuration:Database:PollingInterval"] ?? "00:00:30");
+var pollingInterval = builder.Configuration
+    .GetSection("Ling:Configuration:Database:PollingInterval")
+    .Get<TimeSpan?>() ?? TimeSpan.FromSeconds(30);
 builder.Configuration.AddAdoNetDatabaseConfiguration(new()
 {
     ProviderFactory = SqliteFactory.Instance,
@@ -71,17 +74,21 @@ SQL Server、PostgreSQL 等数据库使用各自驱动包提供的 `DbProviderFa
 using Ling.Configuration.Database;
 using Ling.Configuration.Database.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 var connectionString = builder.Configuration["Ling:Configuration:Database:ConnectionString"]!;
-var pollingInterval = TimeSpan.Parse(builder.Configuration["Ling:Configuration:Database:PollingInterval"] ?? "00:00:30");
+var pollingInterval = builder.Configuration
+    .GetSection("Ling:Configuration:Database:PollingInterval")
+    .Get<TimeSpan?>() ?? TimeSpan.FromSeconds(30);
+IDbContextFactory<SettingsContext> contextFactory = CreateSettingsContextFactory(connectionString);
 builder.Configuration.AddEntityFrameworkCoreDatabaseConfiguration<SettingsContext, Setting>(
-    () => new SettingsContext(connectionString),
+    contextFactory,
     context => context.Settings.AsNoTracking(),
     setting => new ConfigurationEntry(setting.Key, setting.Value),
     options => options.PollingInterval = pollingInterval);
 ```
 
-上下文工厂用于启动时加载和每次轮询，应直接使用引导配置，不依赖配置完成后才创建的应用服务容器。
+适配器会在启动加载和每次轮询时创建并释放一个上下文。若应用已有 `IDbContextFactory<TContext>`，可直接传入；否则可使用与应用相同的 `DbContextOptions` 配置创建工厂。不要传入某个请求作用域中的 `DbContext` 实例：配置源的生命周期长于请求作用域，而且 EF Core 上下文不支持并发使用。工厂应直接使用引导配置，不能依赖配置构建完成后才创建的应用服务容器。
 
 ## 重载语义
 
@@ -92,3 +99,7 @@ builder.Configuration.AddEntityFrameworkCoreDatabaseConfiguration<SettingsContex
 使用 `IOptionsMonitor<T>` 的服务会收到更新后的选项。在注册服务或构造单例时读取并保存的普通值只代表启动时快照；也可以在需要当前值时读取注入的 `IConfiguration`。
 
 配置源按应用级工作。调用方可以通过查询或连接工厂选择租户配置；本库不在 `IConfiguration` 中内建租户上下文。
+
+## 许可证
+
+本项目采用 [MIT 许可证](LICENSE)。

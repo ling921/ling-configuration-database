@@ -18,4 +18,18 @@ public static class EntityFrameworkCoreDatabaseConfigurationBuilderExtensions
         var loader = new EntityFrameworkCoreDatabaseConfigurationLoader<TContext, TEntity>(contextFactory, queryFactory, projection);
         return builder.AddDatabaseConfiguration(loader, configure);
     }
+
+    public static IConfigurationBuilder AddEntityFrameworkCoreDatabaseConfiguration<TContext, TEntity>(
+        this IConfigurationBuilder builder,
+        IDbContextFactory<TContext> contextFactory,
+        Func<TContext, IQueryable<TEntity>> queryFactory,
+        Expression<Func<TEntity, ConfigurationEntry>> projection,
+        Action<DatabaseConfigurationOptions>? configure = null)
+        where TContext : DbContext
+    {
+        ArgumentNullException.ThrowIfNull(contextFactory);
+
+        var loader = new EntityFrameworkCoreDatabaseConfigurationLoader<TContext, TEntity>(contextFactory, queryFactory, projection);
+        return builder.AddDatabaseConfiguration(loader, configure);
+    }
 }

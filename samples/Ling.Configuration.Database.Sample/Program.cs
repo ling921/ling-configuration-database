@@ -1,6 +1,8 @@
 using Ling.Configuration.Database;
 using Ling.Configuration.Database.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -8,11 +10,15 @@ using Microsoft.Extensions.Options;
 var builder = Host.CreateApplicationBuilder(args);
 var connectionString = builder.Configuration["Ling:Configuration:Database:ConnectionString"]
     ?? throw new InvalidOperationException("Set the bootstrap database connection string.");
-var pollingInterval = TimeSpan.Parse(
-    builder.Configuration["Ling:Configuration:Database:PollingInterval"] ?? "00:00:30",
-    System.Globalization.CultureInfo.InvariantCulture);
+var pollingInterval = builder.Configuration
+    .GetSection("Ling:Configuration:Database:PollingInterval")
+    .Get<TimeSpan?>() ?? TimeSpan.FromSeconds(30);
+var contextOptions = new DbContextOptionsBuilder<SampleContext>()
+    .UseSqlite(connectionString)
+    .Options;
+IDbContextFactory<SampleContext> contextFactory = new PooledDbContextFactory<SampleContext>(contextOptions);
 
-await using (var setup = CreateContext(connectionString))
+await using (var setup = await contextFactory.CreateDbContextAsync())
 {
     await setup.Database.EnsureCreatedAsync();
     if (!await setup.Settings.AnyAsync())
@@ -23,7 +29,7 @@ await using (var setup = CreateContext(connectionString))
 }
 
 builder.Configuration.AddEntityFrameworkCoreDatabaseConfiguration<SampleContext, Setting>(
-    () => CreateContext(connectionString),
+    contextFactory,
     context => context.Settings.AsNoTracking(),
     setting => new ConfigurationEntry(setting.Key, setting.Value),
     options => options.PollingInterval = pollingInterval);
@@ -34,9 +40,6 @@ var monitor = host.Services.GetRequiredService<IOptionsMonitor<SampleOptions>>()
 Console.WriteLine(monitor.CurrentValue.Message);
 monitor.OnChange(options => Console.WriteLine($"Updated: {options.Message}"));
 await host.RunAsync();
-
-static SampleContext CreateContext(string connectionString)
-    => new(new DbContextOptionsBuilder<SampleContext>().UseSqlite(connectionString).Options);
 
 sealed class SampleContext(DbContextOptions<SampleContext> options) : DbContext(options)
 {

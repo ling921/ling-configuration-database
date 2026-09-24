@@ -21,6 +21,17 @@ public sealed class EntityFrameworkCoreDatabaseConfigurationLoader<TContext, TEn
         _projection = projection ?? throw new ArgumentNullException(nameof(projection));
     }
 
+    public EntityFrameworkCoreDatabaseConfigurationLoader(
+        IDbContextFactory<TContext> contextFactory,
+        Func<TContext, IQueryable<TEntity>> queryFactory,
+        Expression<Func<TEntity, ConfigurationEntry>> projection)
+        : this(
+            (contextFactory ?? throw new ArgumentNullException(nameof(contextFactory))).CreateDbContext,
+            queryFactory,
+            projection)
+    {
+    }
+
     public IReadOnlyCollection<ConfigurationEntry> Load()
     {
         using var context = _contextFactory();

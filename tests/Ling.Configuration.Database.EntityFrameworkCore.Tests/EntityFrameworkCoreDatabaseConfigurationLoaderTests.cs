@@ -21,7 +21,7 @@ public sealed class EntityFrameworkCoreDatabaseConfigurationLoaderTests
         }
 
         var loader = new EntityFrameworkCoreDatabaseConfigurationLoader<SettingsContext, ConfigurationRow>(
-            () => CreateContext(connectionString),
+            new DelegateDbContextFactory<SettingsContext>(() => CreateContext(connectionString)),
             context => context.Settings.AsNoTracking(),
             row => new ConfigurationEntry(row.Key, row.Value));
 
@@ -37,6 +37,16 @@ public sealed class EntityFrameworkCoreDatabaseConfigurationLoaderTests
     private sealed class SettingsContext(DbContextOptions<SettingsContext> options) : DbContext(options)
     {
         public DbSet<ConfigurationRow> Settings => Set<ConfigurationRow>();
+    }
+
+    private sealed class DelegateDbContextFactory<TContext>(Func<TContext> create)
+        : IDbContextFactory<TContext>
+        where TContext : DbContext
+    {
+        public TContext CreateDbContext() => create();
+
+        public Task<TContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(create());
     }
 
     private sealed class ConfigurationRow
