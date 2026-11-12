@@ -4,6 +4,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Ling.Configuration.Database.Tests/Ling.Configuration.Database.Tests.csproj" />
+    <Project Path="tests/Ling.Configuration.Database.NativeAotSmoke/Ling.Configuration.Database.NativeAotSmoke.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Ling.Configuration.Database.Sample/Ling.Configuration.Database.Sample.csproj" />

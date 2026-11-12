@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace Ling.Configuration.Database;
 
-internal sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfigurationLoader
+internal sealed partial class AdoNetDatabaseConfigurationLoader : IDatabaseConfigurationLoader
 {
     private readonly string _connectionString;
     private readonly DbProviderFactory _providerFactory;
@@ -91,7 +91,7 @@ internal sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfiguration
     {
         string QuoteIdentifier(string identifier)
         {
-            if (!Regex.IsMatch(identifier, @"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant))
+            if (!IdentifierRegex().IsMatch(identifier))
             {
                 throw new ArgumentException($"Database identifier '{identifier}' is invalid. Use letters, digits, and underscores, or provide a provider-specific IdentifierQuoter.");
             }
@@ -134,4 +134,7 @@ internal sealed class AdoNetDatabaseConfigurationLoader : IDatabaseConfiguration
             && Convert.ToBoolean(reader.GetValue(2), CultureInfo.InvariantCulture);
         return new ConfigurationEntry(key, value, isEncrypted);
     }
+
+    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant)]
+    private static partial Regex IdentifierRegex();
 }
