@@ -18,7 +18,7 @@ var configuration = new ConfigurationBuilder()
         factory,
         options =>
         {
-            options.PollingInterval = Timeout.InfiniteTimeSpan;
+            options.PollingInterval = TimeSpan.FromMinutes(5);
             options.Decryptor = entry => $"decrypted:{entry.Value}";
         })
     .Build();
