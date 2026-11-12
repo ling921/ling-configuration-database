@@ -2,6 +2,8 @@
   <PropertyGroup>
     <TargetFrameworks>net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
     <PackageId>Ling.Configuration.Database</PackageId>
     <Title>Ling.Configuration.Database</Title>
     <Description>Database backed Microsoft.Extensions.Configuration provider with polling reload support.</Description>
