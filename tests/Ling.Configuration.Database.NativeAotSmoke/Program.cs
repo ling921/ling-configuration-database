@@ -112,6 +112,7 @@ file sealed class InMemoryDataReader(IReadOnlyList<(string Key, string? Value, b
     public override DateTime GetDateTime(int ordinal) => throw new NotSupportedException();
     public override decimal GetDecimal(int ordinal) => throw new NotSupportedException();
     public override double GetDouble(int ordinal) => throw new NotSupportedException();
+    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicFields)]
     public override Type GetFieldType(int ordinal) => typeof(object);
     public override float GetFloat(int ordinal) => throw new NotSupportedException();
     public override Guid GetGuid(int ordinal) => throw new NotSupportedException();
